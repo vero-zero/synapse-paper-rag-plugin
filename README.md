@@ -1,5 +1,7 @@
 # Paper RAG Dataset – Synapse Plugin
 
+[![test](https://github.com/vero-zero/synapse-paper-rag-plugin/actions/workflows/test.yml/badge.svg)](https://github.com/vero-zero/synapse-paper-rag-plugin/actions/workflows/test.yml)
+
 오픈액세스 논문을 수집해 **RAG(검색 증강 생성)용 청크 데이터셋**과 **데이터 품질 리포트**를 만드는 [Synapse](https://www.datamaker.io) 플러그인입니다.
 데이터메이커가 공개한 [`synapse-sdk`](https://pypi.org/project/synapse-sdk/) v2의 플러그인 구조(config.yaml, `BaseAction`, Storage)를 따라 만들었습니다.
 
@@ -63,7 +65,7 @@ synapse plugin run build_rag --mode local --params '{"dataset_name": "demo", "ch
 # S3/MinIO에 저장하려면 storage 파라미터만 바꾼다
 #   "storage": {"provider": "s3", "configuration": {"bucket_name": "...", "endpoint_url": "..."}}
 
-pytest   # 19개
+pytest   # 19개 (GitHub Actions에서 Ubuntu·Windows로 push마다 자동 실행)
 ```
 
 ## 테스트
