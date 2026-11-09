@@ -53,6 +53,24 @@ synapse plugin run build_rag →  chunks.jsonl      (임베딩용 텍스트 + �
   - 겹치는 부분이 단어 중간에서 시작하지 않게 했습니다.
 - **OpenAlex 초록 복원:** OpenAlex는 초록을 `{단어: [위치]}` 역색인으로 줍니다. 이를 원문 순서로 복원합니다.
 
+## 기술 스택과 선택 이유
+
+| 기술 | 쓰는 곳 | 선택 이유 |
+|---|---|---|
+| synapse-sdk v2 | 플러그인 구조, 저장, 진행률·메트릭 | Synapse 플랫폼에 그대로 올릴 수 있는 형식. 공식 CLI(`synapse plugin create`)로 뼈대 생성 |
+| OpenAlex API | 논문 수집 | 무료 공개 API이고 오픈액세스 여부·초록을 제공해 라이선스 걱정 없이 사용 가능 |
+| httpx + 지수 백오프 | API 호출 | 429·5xx 같은 일시 오류는 재시도하고, 4xx는 즉시 실패시켜 잘못된 요청을 반복하지 않음 |
+| Pydantic v2 | 액션 파라미터 | 잘못된 설정(겹침 ≥ 청크 길이, 경로 조작)을 실행 전에 거절 |
+| JSONL | 결과 파일 | 한 줄에 한 건이라 대용량도 스트리밍 처리 가능, RAG 도구가 바로 읽음 |
+| 글자 수 기준 청크 | 청크 분할 | 특정 임베딩 모델의 토크나이저에 묶이지 않게. 모델 선택은 데이터셋을 쓰는 쪽에 맡김 |
+| pytest · respx · GitHub Actions | 테스트 · CI | 외부 API 없이 재현 가능한 테스트, Ubuntu·Windows 양쪽 자동 실행 |
+
+**범위에서 뺀 것:** 원문 PDF는 라이선스와 OCR 비용 때문에 1차 범위에서 제외하고 초록만 사용했습니다.
+
+## 데모
+
+- 청크 분할 로직(`chunk_text()`)을 JavaScript로 옮긴 데모를 [포트폴리오](https://vero-zero.github.io/#demo)에서 직접 돌려 볼 수 있습니다. Python 원본과 15개 조건에서 같은 결과가 나오는 것을 확인했습니다.
+
 ## 실행
 
 ```bash
@@ -76,11 +94,23 @@ pytest   # 19개 (GitHub Actions에서 Ubuntu·Windows로 push마다 자동 실�
 | [tests/test_openalex.py](tests/test_openalex.py) | 초록 복원, 응답 정규화, 페이지네이션, 필터, 429 재시도, 장애 시 예외, 4xx는 재시도하지 않음 |
 | [tests/test_actions.py](tests/test_actions.py) | `config.yaml`의 액션 탐색, SDK `LocalExecutor`로 collect → build_rag 전체 실행, 파라미터 검증 실패 |
 
-## 개발하며 발견한 점
+## 트러블슈팅
 
-`synapse-sdk 2026.2.22`는 `config.yaml`을 인코딩을 지정하지 않고 엽니다(`plugins/discovery.py`의 `path.open()`).
-그래서 한국어 Windows(cp949)에서는 `config.yaml`에 한글이 있으면 `UnicodeDecodeError`가 납니다.
-이 플러그인은 `config.yaml`을 ASCII로만 작성해서 피했습니다. SDK 쪽에서 `encoding="utf-8"`을 지정하면 해결됩니다.
+### 1. 한국어 Windows에서만 플러그인 탐색 실패
+- **증상:** `config.yaml`에 한글 설명을 넣자 `UnicodeDecodeError`
+- **원인:** `synapse-sdk 2026.2.22`가 `config.yaml`을 인코딩 지정 없이 엶(`plugins/discovery.py`의 `path.open()`) → 한국어 Windows에서는 cp949로 읽음
+- **해결:** `config.yaml`은 ASCII로만 작성. SDK에서 `encoding="utf-8"`을 지정하면 근본 해결
+- **재발 방지:** GitHub Actions에 Windows 러너를 추가해 OS별 문제를 함께 확인
+
+### 2. 파라미터 검증 실패가 다른 예외로 올라옴
+- **증상:** 잘못된 파라미터 테스트에서 `ValidationError`를 기대했는데 다른 예외가 발생
+- **원인:** SDK `LocalExecutor`가 검증 오류를 `ExecutionError`로 감싸서 전달
+- **해결:** 통합 테스트는 `ExecutionError`와 메시지로 검증하고, 순수 로직은 SDK 없이 단위 테스트
+
+### 3. JS 이식본과 Python 원본 결과 1건 불일치
+- **증상:** 데모용으로 옮긴 청크 로직을 15개 조건으로 비교하자 1건에서 청크 앞 공백이 다름
+- **원인:** overlap이 0이고 조각이 공백으로 시작할 때 Python은 `.strip()` 경로를 타지만 JS는 다른 분기로 빠짐
+- **해결:** 분기 조건을 원본과 같게 맞춤 → 15/15 일치
 
 ## 개발 방식
 
