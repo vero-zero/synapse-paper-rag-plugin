@@ -1,0 +1,17 @@
+# Files to exclude from plugin archive
+.git
+.venv
+venv
+__pycache__
+*.pyc
+.pytest_cache
+.ruff_cache
+*.egg-info
+dist
+build
+
+# Temporary files made while checking behavior (Synapse Chat probes). Delete them when done;
+# if one is left behind it still stays out of the archive.
+probe*.txt
+tmp_*.py
+*_tmp.py

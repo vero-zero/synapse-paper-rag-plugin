@@ -1,0 +1,25 @@
+name: Paper RAG Dataset
+code: paper-rag-dataset
+version: 0.1.0
+variant: null
+category: custom
+# NOTE: keep this file ASCII-only. synapse-sdk opens config.yaml without an explicit
+# encoding, so non-ASCII text fails on Windows with a non-UTF-8 locale (e.g. cp949).
+description: >-
+  Collects open-access papers from OpenAlex and builds a RAG-ready chunk dataset
+  (JSONL) with source metadata and a data quality report.
+requires:
+  sdk: '>=2026.1.0'
+  python: '>=3.10,<3.13'
+dependencies: {}
+tags: [rag, dataset, papers, openalex]
+
+actions:
+  collect:
+    entrypoint: plugin.collect.CollectAction
+    method: task
+    description: Collect open-access paper metadata and abstracts from OpenAlex into papers.jsonl
+  build_rag:
+    entrypoint: plugin.build_rag.BuildRagAction
+    method: task
+    description: Deduplicate and chunk papers.jsonl into chunks.jsonl plus manifest.json (quality report)
