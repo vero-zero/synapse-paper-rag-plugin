@@ -10,7 +10,7 @@ description: >-
   (JSONL) with source metadata and a data quality report.
 requires:
   sdk: '>=2026.1.0'
-  python: '>=3.10,<3.13'
+  python: '>=3.12,<3.13'
 dependencies: {}
 tags: [rag, dataset, papers, openalex]
 
