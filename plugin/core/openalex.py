@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import logging
+import math
 import time
 from collections.abc import Iterator
 from typing import Any
@@ -29,7 +30,8 @@ def _retry_after(error: Exception | None) -> float | None:
         seconds = float(value) if value is not None else None
     except ValueError:
         return None
-    if seconds is None or seconds < 0:
+    # NaN·inf는 float()를 통과하지만 time.sleep(nan)은 ValueError를 내므로 유한한 값만 받는다
+    if seconds is None or not math.isfinite(seconds) or seconds < 0:
         return None
     return min(seconds, MAX_RETRY_AFTER_SECONDS)
 
