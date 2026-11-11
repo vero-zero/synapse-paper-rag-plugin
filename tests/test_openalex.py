@@ -74,6 +74,22 @@ def test_retries_on_429_then_succeeds():
 
 
 @respx.mock
+@pytest.mark.parametrize(("header", "expected"), [("2", 2.0), ("9999", 60.0), ("Wed, 21 Oct 2026 07:28:00 GMT", 5.0)])
+def test_429_waits_for_retry_after(monkeypatch, header, expected):
+    waits: list[float] = []
+    monkeypatch.setattr("plugin.core.openalex.time.sleep", waits.append)
+    respx.get(f"{BASE}/works").mock(
+        side_effect=[
+            httpx.Response(429, headers={"Retry-After": header}),
+            httpx.Response(200, json={"meta": {"count": 1}, "results": [work(1)]}),
+        ]
+    )
+    with httpx.Client() as http:
+        list(OpenAlexClient(http, base_url=BASE, backoff_seconds=5).iter_papers("rag", max_papers=1))
+    assert waits == [expected]  # 초 단위는 따르고, 너무 길면 상한, 날짜 형식이면 지수 백오프
+
+
+@respx.mock
 def test_raises_source_unavailable_after_retries():
     respx.get(f"{BASE}/works").mock(side_effect=httpx.ConnectError("down"))
     with httpx.Client() as http:
