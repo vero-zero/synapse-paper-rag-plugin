@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+import unicodedata
 from collections import Counter
 from collections.abc import Iterable
 
@@ -19,6 +20,7 @@ from plugin.core.openalex import Paper
 
 _SENTENCE_END = re.compile(r"(?<=[.!?。])\s+")
 _SPACES = re.compile(r"\s+")
+_NON_WORD = re.compile(r"[\W_]+")
 
 
 class Chunk(BaseModel):
@@ -83,9 +85,15 @@ def chunk_text(text: str, chunk_size: int, overlap: int) -> list[str]:
 
 
 def dedupe_key(paper: Paper) -> str:
+    """DOI가 있으면 DOI, 없으면 구두점·공백을 뺀 제목. 제목이 비면 OpenAlex ID로 구분한다."""
     if paper.doi:
         return f"doi:{paper.doi.lower()}"
-    return "title:" + re.sub(r"[^0-9a-z가-힣]", "", paper.title.lower())
+    # 모든 언어의 글자를 남기고(\w는 유니코드 기준) 구두점·공백·밑줄만 제거한다.
+    # NFKC는 전각/반각 같은 표기 차이를 맞추고, casefold는 lower보다 넓게 대소문자를 맞춘다.
+    title = _NON_WORD.sub("", unicodedata.normalize("NFKC", paper.title).casefold())
+    if not title:
+        return f"id:{paper.source_id}"
+    return f"title:{title}"
 
 
 def doc_id_of(paper: Paper) -> str:
