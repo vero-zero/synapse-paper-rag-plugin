@@ -17,6 +17,23 @@ from pydantic import BaseModel
 log = logging.getLogger(__name__)
 
 RETRYABLE_STATUS = {429, 500, 502, 503, 504}
+MAX_RETRY_AFTER_SECONDS = 60.0  # 서버가 너무 긴 대기를 요구해도 작업이 멈춰 있지 않도록 상한을 둔다
+
+
+def _retry_after(error: Exception | None) -> float | None:
+    """429/503 응답의 Retry-After(초 단위)를 읽는다. 없거나 날짜 형식이면 None을 돌려 지수 백오프를 쓴다."""
+    if not isinstance(error, httpx.HTTPStatusError):
+        return None
+    value = error.response.headers.get("Retry-After")
+    try:
+        seconds = float(value) if value is not None else None
+    except ValueError:
+        return None
+    if seconds is None or seconds < 0:
+        return None
+    return min(seconds, MAX_RETRY_AFTER_SECONDS)
+
+
 SELECT_FIELDS = ",".join(
     [
         "id",
@@ -160,7 +177,9 @@ class OpenAlexClient:
             except httpx.TransportError as e:
                 last_error = e
             if attempt < self._max_retries:
-                wait = self._backoff * (2**attempt)
+                wait = _retry_after(last_error)
+                if wait is None:
+                    wait = self._backoff * (2**attempt)
                 log.warning("OpenAlex 호출 실패(%s), %.1fs 후 재시도 %d/%d", last_error, wait, attempt + 1, self._max_retries)
                 time.sleep(wait)
         raise SourceUnavailable(f"OpenAlex에 연결할 수 없습니다: {last_error}") from last_error
