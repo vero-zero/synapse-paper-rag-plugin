@@ -84,6 +84,7 @@ def test_retries_on_429_then_succeeds():
         ("inf", 5.0),
         ("-3", 5.0),
     ],
+    ids=["seconds", "capped", "http-date", "nan", "inf", "negative"],
 )
 def test_429_waits_for_retry_after(monkeypatch, header, expected):
     waits: list[float] = []

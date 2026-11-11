@@ -52,6 +52,7 @@ def test_dedupe_by_doi_then_normalized_title():
         ("Обзор методов", "Анализ данных"),  # 키릴 문자
         ("Café study", "Caf study"),  # 악센트 문자
     ],
+    ids=["japanese", "cyrillic", "accented"],
 )
 def test_title_key_keeps_non_ascii_letters(a, b):
     assert dedupe_key(make_paper(doi=None, title=a)) != dedupe_key(make_paper(doi=None, title=b))
