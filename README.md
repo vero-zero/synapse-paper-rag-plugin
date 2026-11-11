@@ -84,7 +84,7 @@ pytest   # 19개
 
 ## 설계 포인트
 
-- **로직과 플랫폼을 분리했습니다.** `plugin/core/`(수집 · 청크 · 입출력)는 순수 Python이고, Synapse 액션(`plugin/collect.py`, `plugin/build_rag.py`)은 파라미터 검증 · 진행률 · 메트릭 · 저장만 맡습니다. 그래서 핵심 로직은 SDK 없이 단위 테스트합니다.
+- **로직과 플랫폼을 분리했습니다.** 수집(`plugin/core/openalex.py`)과 청크(`plugin/core/chunking.py`)는 SDK를 import하지 않는 순수 Python이고, Synapse 액션(`plugin/collect.py`, `plugin/build_rag.py`)은 파라미터 검증 · 진행률 · 메트릭 · 저장만 맡습니다. 그래서 핵심 로직은 SDK 없이 단위 테스트합니다. 저장을 맡는 `plugin/core/io.py`만 SDK의 Storage를 씁니다.
 - **잘못된 요청은 실행 전에 거절합니다.** Pydantic으로 `chunk_overlap < chunk_size`를 검사하고, `dataset_name`은 `../` 같은 경로 조작을 막습니다.
 - **저장소를 바꿔도 코드는 그대로입니다.** 결과는 SDK의 `get_storage()`로 저장해, `storage` 파라미터만 바꾸면 로컬 대신 S3 · MinIO · GCS · SFTP에 저장됩니다.
 - **데이터 품질을 드러냅니다.** 빠진 건수와 이유, 언어 분포, 평균 청크 길이를 `manifest.json`과 `set_metrics`로 남깁니다.
@@ -93,10 +93,10 @@ pytest   # 19개
 plugin/
 ├── collect.py        # Synapse 액션: 파라미터 검증 · 진행률 · 저장
 ├── build_rag.py      # Synapse 액션: 청크 생성 · 품질 리포트 · 메트릭
-└── core/             # SDK와 분리된 순수 로직 (단위 테스트 대상)
+└── core/             # 핵심 로직 (openalex · chunking은 SDK 없이 단위 테스트)
     ├── openalex.py   # API 클라이언트 · 재시도 · 초록 복원
     ├── chunking.py   # 문장 분할 · overlap · 중복 제거 · 품질 리포트
-    └── io.py         # JSONL 입출력 · Storage 업로드
+    └── io.py         # JSONL 입출력 · Storage 업로드 (SDK 사용)
 ```
 
 <br>
@@ -106,11 +106,11 @@ plugin/
 | 기술 | 쓰는 곳 | 선택 이유 |
 |---|---|---|
 | synapse-sdk v2 | 플러그인 구조 · 저장 · 진행률 · 메트릭 | Synapse 플랫폼에 그대로 올릴 수 있는 형식. 공식 CLI(`synapse plugin create`)로 뼈대 생성 |
-| OpenAlex API | 논문 수집 | 무료 공개 API이고 오픈액세스 여부 · 초록을 제공해 라이선스 걱정 없이 사용 가능 |
+| OpenAlex API | 논문 수집 | 무료 공개 API이고 오픈액세스 여부 · 초록 · 라이선스 정보를 함께 제공. 단, 공개 접근이 재배포 허가를 뜻하지는 않으므로 라이선스는 청크마다 `metadata.license`로 남기고 사용 판단은 데이터셋을 쓰는 쪽에 맡김 |
 | httpx + 지수 백오프 | API 호출 | 429 · 5xx 같은 일시 오류는 재시도하고, 4xx는 즉시 실패시켜 잘못된 요청을 반복하지 않음 |
 | Pydantic v2 | 액션 파라미터 | 잘못된 설정을 실행 전에 거절 |
-| JSONL | 결과 파일 | 한 줄에 한 건이라 대용량도 스트리밍 처리 가능, RAG 도구가 바로 읽음 |
-| 글자 수 기준 청크 | 청크 분할 | 특정 임베딩 모델의 토크나이저에 묶이지 않게. 모델 선택은 데이터셋을 쓰는 쪽에 맡김 |
+| JSONL | 결과 파일 | 한 줄에 한 건이라 다른 도구가 줄 단위로 읽을 수 있고, RAG 도구가 바로 읽음. 현재 build_rag는 전체를 메모리에 올려 처리(수집 상한 1,000건 기준) |
+| 글자 수 기준 청크 | 청크 분할 | 특정 임베딩 모델의 토크나이저에 묶이지 않게. 대신 토큰 수는 보장하지 않으므로 임베딩 전에 대상 모델 기준으로 확인 필요. 문장 분리는 공백으로 문장을 구분하는 언어(영어 · 한국어 등) 기준 |
 | pytest · respx · GitHub Actions | 테스트 · CI | 외부 API 없이 재현 가능한 테스트, Ubuntu · Windows 양쪽 자동 실행 |
 
 **범위에서 뺀 것:** 원문 PDF는 라이선스와 OCR 비용 때문에 1차 범위에서 제외하고 초록만 사용했습니다.
