@@ -45,6 +45,28 @@ def test_dedupe_by_doi_then_normalized_title():
     assert dedupe_key(make_paper(doi=None, title="A Survey of RAG!")) == dedupe_key(make_paper(doi=None, title="a survey of rag"))
 
 
+@pytest.mark.parametrize(
+    ("a", "b"),
+    [
+        ("検索拡張生成の研究", "ラベル付きデータの研究"),  # 일본어
+        ("Обзор методов", "Анализ данных"),  # 키릴 문자
+        ("Café study", "Caf study"),  # 악센트 문자
+    ],
+)
+def test_title_key_keeps_non_ascii_letters(a, b):
+    assert dedupe_key(make_paper(doi=None, title=a)) != dedupe_key(make_paper(doi=None, title=b))
+
+
+def test_title_key_normalizes_width_and_punctuation():
+    assert dedupe_key(make_paper(doi=None, title="ＲＡＧ：検索")) == dedupe_key(make_paper(doi=None, title="rag 検索"))
+
+
+def test_punctuation_only_titles_do_not_collide():
+    a = make_paper(doi=None, title="???", source_id="W1")
+    b = make_paper(doi=None, title="!!!", source_id="W2")
+    assert dedupe_key(a) != dedupe_key(b)
+
+
 def test_build_chunks_skips_duplicates_and_short_abstracts_with_report():
     papers = [
         make_paper(),
