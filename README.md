@@ -3,7 +3,7 @@
 [![test](https://github.com/vero-zero/synapse-paper-rag-plugin/actions/workflows/test.yml/badge.svg)](https://github.com/vero-zero/synapse-paper-rag-plugin/actions/workflows/test.yml)
 ![python](https://img.shields.io/badge/python-3.12-3776AB?logo=python&logoColor=white)
 ![synapse-sdk](https://img.shields.io/badge/synapse--sdk-v2-315efb)
-![tests](https://img.shields.io/badge/tests-19%20passed-4ade80)
+![tests](https://img.shields.io/badge/tests-30%20passed-4ade80)
 
 > **오픈액세스 논문을 수집해 RAG(검색 증강 생성)에 바로 쓸 수 있는 청크 데이터셋과 데이터 품질 리포트로 바꾸는 [Synapse](https://www.datamaker.io) 플러그인입니다.**
 > 데이터메이커가 공개한 [`synapse-sdk`](https://pypi.org/project/synapse-sdk/) v2의 플러그인 구조(config.yaml · `BaseAction` · Storage)를 그대로 따랐습니다.
@@ -45,7 +45,7 @@ AI가 문서를 근거로 답하게 하려면(RAG), 문서를 **검색하기 좋
 
 ![chunk demo](docs/images/chunk_demo.gif)
 
-### 4. 테스트 — 19개 통과 (GitHub Actions: Ubuntu · Windows)
+### 4. 테스트 — 30개 통과 (GitHub Actions: Ubuntu · Windows)
 
 ![pytest](docs/images/pytest.png)
 
@@ -77,7 +77,7 @@ synapse plugin run build_rag --mode local --params '{"dataset_name": "demo", "ch
 # S3 · MinIO에 저장하려면 storage 파라미터만 바꾼다
 #   "storage": {"provider": "s3", "configuration": {"bucket_name": "...", "endpoint_url": "..."}}
 
-pytest   # 19개
+pytest   # 30개
 ```
 
 <br>
@@ -121,8 +121,8 @@ plugin/
 
 | 파일 | 내용 |
 |---|---|
-| [tests/test_chunking.py](tests/test_chunking.py) | 청크 최대 길이, 문장 경계, overlap 연결, 긴 문장 분할, 중복 제거, 품질 리포트, 메타데이터 |
-| [tests/test_openalex.py](tests/test_openalex.py) | 초록 복원, 응답 정규화, 페이지네이션, 필터, 429 재시도, 장애 시 예외, 4xx는 재시도하지 않음 |
+| [tests/test_chunking.py](tests/test_chunking.py) | 청크 최대 길이, 문장 경계, overlap 연결, 긴 문장 분할, 중복 제거(다국어 제목 포함), 품질 리포트, 메타데이터 |
+| [tests/test_openalex.py](tests/test_openalex.py) | 초록 복원, 응답 정규화, 페이지네이션, 필터, 429 재시도, Retry-After 대기(비정상 값 포함), 장애 시 예외, 4xx는 재시도하지 않음 |
 | [tests/test_actions.py](tests/test_actions.py) | `config.yaml`의 액션 탐색, SDK `LocalExecutor`로 collect → build_rag 전체 실행, 파라미터 검증 실패 |
 
 <br>
@@ -145,11 +145,29 @@ plugin/
 - **원인:** overlap이 0이고 조각이 공백으로 시작할 때 Python은 `.strip()` 경로를 타지만 JS는 다른 분기로 빠짐
 - **해결:** 분기 조건을 원본과 같게 맞춤 → 15/15 일치
 
+### 4. 플러그인이 허용한 Python 3.10에서 build_rag import 실패
+- **증상:** 코드 리뷰에서 `config.yaml`은 Python `>=3.10`을 허용하는데 `build_rag.py`가 3.10에서 import되지 않는다는 지적을 받음
+- **원인:** `datetime.UTC`는 Python 3.11부터 제공됨. 게다가 `synapse-sdk` 자체가 `Requires-Python: >=3.12`라 3.10 · 3.11에서는 SDK 설치부터 불가능. `pyproject.toml` · CI · README는 3.12였는데 `config.yaml`만 달랐음
+- **해결:** 코드를 3.10에 맞추지 않고, `config.yaml`을 실제 최소 버전인 `>=3.12`로 맞춤
+- **재발 방지:** Python 버전은 SDK의 요구 버전을 기준으로 `config.yaml` · `pyproject.toml` · CI에 같은 값으로 선언
+
+### 5. DOI 없는 일본어 · 러시아어 논문이 모두 중복으로 제거됨
+- **증상:** DOI가 없는 논문 중 제목이 일본어 · 키릴 문자로만 된 논문끼리 서로 다른 논문인데도 하나만 남음
+- **원인:** 제목 중복 키가 영문 · 숫자 · 한글(`[^0-9a-z가-힣]` 제거)만 남겨서, 그 외 문자로 된 제목은 키가 빈 값(`title:`)으로 같아짐
+- **해결:** 유니코드 글자는 모두 남기고 구두점 · 공백만 제거. NFKC 정규화와 `casefold`로 전각/반각 · 대소문자 차이를 맞추고, 제목이 구두점뿐이면 OpenAlex ID로 구분
+- **재발 방지:** 일본어 · 키릴 문자 · 악센트 문자 · 전각 문자 · 구두점만 있는 제목을 테스트에 추가. 단, 이 변경으로 해당 논문의 `doc_id`가 바뀌므로 기존 데이터셋은 다시 생성해야 함
+
+### 6. 429 응답의 Retry-After를 무시하고, 비정상 값이면 수집이 중단될 수 있음
+- **증상:** OpenAlex가 429와 함께 `Retry-After`로 대기 시간을 알려줘도 1 · 2 · 4초 간격으로만 재시도. 이를 반영한 뒤에는 `Retry-After: NaN`이 오면 수집 작업 전체가 예외로 중단될 수 있다는 리뷰를 받음
+- **원인:** 재시도 대기를 고정된 지수 백오프로만 계산. 반영 후에는 `float("NaN")`이 오류 없이 숫자로 변환되고 모든 비교를 통과해 `time.sleep(nan)`에서 `ValueError` 발생
+- **해결:** 초 단위 `Retry-After`를 우선 따르되 최대 60초로 제한. 값이 없거나 날짜 형식 · `NaN` · `inf` · 음수이면 기존 지수 백오프 사용
+- **재발 방지:** 초 단위 · 상한 초과 · 날짜 형식 · NaN · inf · 음수 6가지 경우를 테스트로 고정
+
 <br>
 
 ## 개발 방식
 
-방향과 도메인 설계, 검증 기준은 직접 정했고, 구현과 테스트 작성은 AI 코딩 에이전트(Claude Code)와 나눠 진행했습니다. AI가 만든 코드는 원본 로직과 같은 입력으로 결과를 대조하고, 테스트와 CI로 다시 확인한 뒤 반영했습니다.
+Synapse SDK를 사용해 OpenAlex 논문을 수집하고, 출처와 품질 정보를 유지하면서 RAG용 데이터셋으로 변환하는 플러그인을 만들었습니다. Claude Code를 구현에 활용했지만, 제가 문제 범위와 검증 기준을 정하고 생성된 코드를 테스트와 리뷰로 확인했습니다. 그 과정에서 버전 조건, 다국어 중복 키, API 재시도 동작을 발견해 수정했습니다. 현재 프로젝트 범위는 검색용 데이터 준비까지이며, 임베딩과 검색 평가는 다음 단계로 남겨뒀습니다.
 
 ## 다음 단계
 
