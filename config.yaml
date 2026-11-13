@@ -23,3 +23,11 @@ actions:
     entrypoint: plugin.build_rag.BuildRagAction
     method: task
     description: Deduplicate and chunk papers.jsonl into chunks.jsonl plus manifest.json (quality report)
+  embed:
+    entrypoint: plugin.embed.EmbedAction
+    method: task
+    description: Embed chunks.jsonl texts into embeddings.npy (hash baseline or OpenAI-compatible API)
+  evaluate:
+    entrypoint: plugin.evaluate.EvaluateAction
+    method: task
+    description: Run vector search over embeddings and report Recall@k, MRR and nDCG@k in eval_report.json

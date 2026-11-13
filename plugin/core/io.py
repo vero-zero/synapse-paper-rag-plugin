@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import tempfile
 from collections.abc import Iterable, Iterator
@@ -42,6 +43,18 @@ def read_text_lines(storage_config: dict[str, Any], key: str) -> Iterator[str]:
     path = get_pathlib(storage_config, key)
     with path.open("r", encoding="utf-8") as f:
         yield from f
+
+
+def read_bytes(storage_config: dict[str, Any], key: str) -> bytes:
+    with get_pathlib(storage_config, key).open("rb") as f:
+        return f.read()
+
+
+def read_jsonl_with_hash(storage_config: dict[str, Any], key: str) -> tuple[list[dict[str, Any]], str]:
+    """JSONL을 읽어 (행 목록, 내용 sha256)을 돌려준다. 해시로 두 산출물이 같은 입력에서 나왔는지 확인한다."""
+    lines = list(read_text_lines(storage_config, key))
+    digest = hashlib.sha256("".join(lines).encode("utf-8")).hexdigest()
+    return list(iter_jsonl(lines)), digest
 
 
 class TempDir:

@@ -12,6 +12,8 @@ from synapse_sdk.plugins.executors.local import LocalExecutor
 
 from plugin.build_rag import BuildRagAction
 from plugin.collect import CollectAction
+from plugin.embed import EmbedAction
+from plugin.evaluate import EvaluateAction
 from tests.test_openalex import BASE, work
 
 
@@ -26,11 +28,13 @@ def long_work(i: int) -> dict:
     return w
 
 
-def test_config_yaml_declares_both_actions():
+def test_config_yaml_declares_all_actions():
     discovery = PluginDiscovery.from_path(".")
-    assert discovery.list_actions() == ["collect", "build_rag"]
+    assert discovery.list_actions() == ["collect", "build_rag", "embed", "evaluate"]
     assert discovery.get_action_class("collect") is CollectAction
     assert discovery.get_action_class("build_rag") is BuildRagAction
+    assert discovery.get_action_class("embed") is EmbedAction
+    assert discovery.get_action_class("evaluate") is EvaluateAction
 
 
 @respx.mock
